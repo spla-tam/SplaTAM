@@ -1,0 +1,10 @@
+dataset_name: 'replica'
+camera_params:
+  image_height: 680
+  image_width: 1200
+  fx: 600.0
+  fy: 600.0
+  cx: 599.5
+  cy: 339.5
+  png_depth_scale: 6553.5
+  crop_edge: 0

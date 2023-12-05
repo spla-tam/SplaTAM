@@ -1,0 +1,11 @@
+dataset_name: 'tum'
+camera_params:
+  image_height: 480
+  image_width: 640
+  fx: 520.9
+  fy: 521.0
+  cx: 325.1
+  cy: 249.7
+  crop_edge: 8
+  png_depth_scale: 5000.0
+  # distortion: [0.2312, -0.7849, -0.0033, -0.0001, 0.9172]

@@ -1,0 +1,3 @@
+[submodule "diff-gaussian-rasterization-w-depth.git"]
+	path = diff-gaussian-rasterization-w-depth.git
+	url = git@github.com:JonathonLuiten/diff-gaussian-rasterization-w-depth.git

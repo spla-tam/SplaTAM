@@ -1,3 +1,10 @@
+# Sub-Directories
+configs/local
+data/
+experiments/
+results/
+wandb/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

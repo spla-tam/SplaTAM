@@ -1,0 +1,9 @@
+dataset_name: 'scannet'
+camera_params:
+  image_height: 968
+  image_width: 1296
+  fx: 1169.621094
+  fy: 1167.105103
+  cx: 646.295044
+  cy: 489.927032
+  png_depth_scale: 1000.0

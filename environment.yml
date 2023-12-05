@@ -1,0 +1,28 @@
+name: splatam
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - cudatoolkit=11.6
+  - python=3.10
+  - pytorch=1.12.1
+  - torchaudio=0.12.1
+  - torchvision=0.13.1
+  - tqdm=4.65.0
+  - Pillow
+  - faiss-gpu
+  - opencv
+  - imageio
+  - matplotlib
+  - kornia
+  - natsort
+  - pyyaml
+  - wandb
+  - pip
+  - pip:
+    - lpips
+    - open3d==0.16.0
+    - torchmetrics
+    - cyclonedds
+    - git+https://github.com/JonathonLuiten/diff-gaussian-rasterization-w-depth/tree/cb65e4b86bc3bd8ed42174b72a62e8d3a3a71110
