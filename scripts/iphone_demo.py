@@ -153,7 +153,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
 
             if total_frames == 0:
                 save_path.mkdir(parents=True, exist_ok=True)
-                images_dir.mkdir()
+                images_dir.mkdir(exist_ok=True)
                 manifest["w"] = sample.width
                 manifest["h"] = sample.height
                 manifest["cx"] = sample.cx
@@ -183,6 +183,8 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                 curr_depth = np.asarray(sample.depth_image, dtype=np.uint8).view(
                     dtype=np.float32).reshape((sample.depth_height, sample.depth_width))
             else:
+                print("No Depth Image Received. Please make sure that the NeRFCapture App \
+                      mentions Depth Supported on the top right corner. Skipping Frame...")
                 continue
 
             # ARKit Poses for saving dataset
