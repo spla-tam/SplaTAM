@@ -1,0 +1,15 @@
+tqdm==4.65.0
+Pillow
+opencv-python
+imageio
+matplotlib
+kornia
+natsort
+pyyaml
+wandb
+lpips
+open3d==0.16.0
+torchmetrics
+cyclonedds
+pytorch-msssim
+git+https://github.com/JonathonLuiten/diff-gaussian-rasterization-w-depth.git@cb65e4b86bc3bd8ed42174b72a62e8d3a3a71110
