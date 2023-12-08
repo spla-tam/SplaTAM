@@ -64,6 +64,8 @@
 </details>
 
 ## Installation
+
+##### (Recommended)
 SplaTAM has been tested on python 3.10, CUDA>=11.6. The simplest way to install all dependences is to use [anaconda](https://www.anaconda.com/) and [pip](https://pypi.org/project/pip/) in the following steps: 
 
 ```bash
@@ -74,10 +76,40 @@ conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit
 pip install -r requirements.txt
 ```
 
-We also provide a conda environment.yml file :
+Alternatively, we also provide a conda environment.yml file :
 ```bash
 conda env create -f environment.yml
 conda activate splatam
+```
+
+#### Docker and Singularity Setup
+
+We also provide a docker image. We recommend using a venv to run the code inside a docker image:
+
+
+```bash
+docker pull nkeetha/splatam:v1
+bash bash_scripts/docker_start.bash
+cd /SplaTAM/
+pip install virtualenv --user
+mkdir venv
+cd venv
+virtualenv splatam --system-site-packages
+pip install -r venv_requirements.txt
+```
+
+Setting up a singularity container is similar:
+```bash
+cd </path/to/singularity/folder/
+singularity pull splatam.sif docker://nkeetha/splatam:v1
+singularity instance start --nv splatam.sif splatam
+singularity run --nv instance://gradslam_2
+cd <path/to/SplaTAM/>
+pip install virtualenv --user
+mkdir venv
+cd venv
+virtualenv splatam --system-site-packages
+pip install -r venv_requirements.txt
 ```
 
 ## Demo
