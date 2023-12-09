@@ -18,7 +18,7 @@
     ·
     <a href="https://www.vision.rwth-aachen.de/person/216/"><strong>Jonathon Luiten</strong></a>
   </p>
-  <h3 align="center"><a href="">Paper</a> | <a href="">Video</a> | <a href="https://spla-tam.github.io/">Project Page</a></h3>
+  <h3 align="center"><a href="https://arxiv.org/pdf/2312.02126.pdf">Paper</a> | <a href="https://youtu.be/jWLI-OFp3qU">Video</a> | <a href="https://spla-tam.github.io/">Project Page</a></h3>
   <div align="center"></div>
 </p>
 
@@ -81,6 +81,10 @@ Alternatively, we also provide a conda environment.yml file :
 conda env create -f environment.yml
 conda activate splatam
 ```
+
+#### Windows
+
+For installation on Windows using Git bash, please refer to the [instructions shared in Issue#9](https://github.com/spla-tam/SplaTAM/issues/9#issuecomment-1848348403).
 
 #### Docker and Singularity Setup
 
