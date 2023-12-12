@@ -12,7 +12,6 @@ dependencies:
   - torchaudio=0.12.1
   - torchvision=0.13.1
   - tqdm=4.65.0
-  - gxx_linux-64=10
   - Pillow
   - faiss-gpu
   - opencv
