@@ -177,7 +177,7 @@ python viz_scripts/online_recon.py configs/iphone/splatam.py
 To run 3D Gaussian Splatting on the SplaTAM reconstruction, please use the following command:
 
 ```bash
-python scripts/post_splatam_opt.pt configs/iphone/post_splatam_opt.py
+python scripts/post_splatam_opt.py configs/iphone/post_splatam_opt.py
 ```
 
 To run 3D Gaussian Splatting on a dataset using ground truth poses, please use the following command:
