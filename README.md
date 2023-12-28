@@ -98,21 +98,23 @@ cd /SplaTAM/
 pip install virtualenv --user
 mkdir venv
 cd venv
-virtualenv splatam --system-site-packages
+virtualenv --system-site-packages splatam
+source ./splatam/bin/activate
 pip install -r venv_requirements.txt
 ```
 
 Setting up a singularity container is similar:
 ```bash
-cd </path/to/singularity/folder/
+cd </path/to/singularity/folder/>
 singularity pull splatam.sif docker://nkeetha/splatam:v1
 singularity instance start --nv splatam.sif splatam
-singularity run --nv instance://gradslam_2
+singularity run --nv instance://splatam
 cd <path/to/SplaTAM/>
 pip install virtualenv --user
 mkdir venv
 cd venv
-virtualenv splatam --system-site-packages
+virtualenv --system-site-packages splatam
+source ./splatam/bin/activate
 pip install -r venv_requirements.txt
 ```
 
@@ -177,7 +179,7 @@ python viz_scripts/online_recon.py configs/iphone/splatam.py
 To run 3D Gaussian Splatting on the SplaTAM reconstruction, please use the following command:
 
 ```bash
-python scripts/post_splatam_opt.pt configs/iphone/post_splatam_opt.py
+python scripts/post_splatam_opt.py configs/iphone/post_splatam_opt.py
 ```
 
 To run 3D Gaussian Splatting on a dataset using ground truth poses, please use the following command:
