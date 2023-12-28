@@ -3,6 +3,7 @@ import os
 import numpy as np
 import random
 import torch
+from plyfile import PlyElement, PlyData
 
 
 def seed_everything(seed=42):
@@ -32,6 +33,38 @@ def params2cpu(params):
     return res
 
 
+def construct_list_of_attributes(f_dc, scale, rotation):
+    l = ['x', 'y', 'z', 'nx', 'ny', 'nz']
+    for i in range(f_dc.shape[1]):
+        l.append('f_dc_{}'.format(i))
+    l.append('opacity')
+    for i in range(scale.shape[1]):
+        l.append('scale_{}'.format(i))
+    for i in range(rotation.shape[1]):
+        l.append('rot_{}'.format(i))
+    return l
+
+
+def convert_npz_to_ply(src, dest):
+    params = np.load(src)
+
+    xyz = params['means3D']
+    normals = np.zeros_like(xyz)
+    f_dc = params['rgb_colors']
+    opacities = params['logit_opacities']
+    scale = params['log_scales'].repeat(3, axis=-1)
+    rotation = params['unnorm_rotations']
+
+    dtype_full = [
+        (attribute, 'f4') for attribute in construct_list_of_attributes(f_dc, scale, rotation)]
+
+    elements = np.empty(xyz.shape[0], dtype=dtype_full)
+    attributes = np.concatenate((xyz, normals, f_dc, opacities, scale, rotation), axis=1)
+    elements[:] = list(map(tuple, attributes))
+    el = PlyElement.describe(elements, 'vertex')
+    PlyData([el]).write(dest)
+
+
 def save_params(output_params, output_dir):
     # Convert to CPU Numpy Arrays
     to_save = params2cpu(output_params)
@@ -40,6 +73,7 @@ def save_params(output_params, output_dir):
     print(f"Saving parameters to: {output_dir}")
     save_path = os.path.join(output_dir, "params.npz")
     np.savez(save_path, **to_save)
+    convert_npz_to_ply(save_path, os.path.join(output_dir, "gsplat.ply"))
 
 
 def save_params_ckpt(output_params, output_dir, time_idx):
@@ -50,6 +84,7 @@ def save_params_ckpt(output_params, output_dir, time_idx):
     print(f"Saving parameters to: {output_dir}")
     save_path = os.path.join(output_dir, "params"+str(time_idx)+".npz")
     np.savez(save_path, **to_save)
+    convert_npz_to_ply(save_path, os.path.join(output_dir, "gsplat"+str(time_idx)+".ply"))
 
 
 def save_seq_params(all_params, output_dir):
@@ -61,6 +96,7 @@ def save_seq_params(all_params, output_dir):
     print(f"Saving parameters to: {output_dir}")
     save_path = os.path.join(output_dir, "params.npz")
     np.savez(save_path, **params_to_save)
+    convert_npz_to_ply(save_path, os.path.join(output_dir, "gsplat.ply"))
 
 
 def save_seq_params_ckpt(all_params, output_dir,time_idx):
@@ -72,3 +108,4 @@ def save_seq_params_ckpt(all_params, output_dir,time_idx):
     print(f"Saving parameters to: {output_dir}")
     save_path = os.path.join(output_dir, "params"+str(time_idx)+".npz")
     np.savez(save_path, **params_to_save)
+    convert_npz_to_ply(save_path, os.path.join(output_dir, "gsplat"+str(time_idx)+".ply"))
