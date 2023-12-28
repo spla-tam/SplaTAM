@@ -918,7 +918,7 @@ def rgbd_slam(config: dict):
                 keyframe_time_indices.append(time_idx)
         
         # Checkpoint every iteration
-        if time_idx % config["checkpoint_interval"] == 0 and config['save_checkpoints']:
+        if config["checkpoint_interval"] == 0 and config['save_checkpoints']:
             ckpt_output_dir = os.path.join(config["workdir"], config["run_name"])
             save_params_ckpt(params, ckpt_output_dir, time_idx)
             np.save(os.path.join(ckpt_output_dir, f"keyframe_time_indices{time_idx}.npy"), np.array(keyframe_time_indices))
