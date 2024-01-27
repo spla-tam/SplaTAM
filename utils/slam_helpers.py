@@ -104,24 +104,36 @@ def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
 
 
 def params2rendervar(params):
+    # Check if Gaussians are Isotropic
+    if params['log_scales'].shape[1] == 1:
+        log_scales = torch.tile(params['log_scales'], (1, 3))
+    else:
+        log_scales = params['log_scales']
+    # Initialize Render Variables
     rendervar = {
         'means3D': params['means3D'],
         'colors_precomp': params['rgb_colors'],
         'rotations': F.normalize(params['unnorm_rotations']),
         'opacities': torch.sigmoid(params['logit_opacities']),
-        'scales': torch.exp(torch.tile(params['log_scales'], (1, 3))),
+        'scales': torch.exp(log_scales),
         'means2D': torch.zeros_like(params['means3D'], requires_grad=True, device="cuda") + 0
     }
     return rendervar
 
 
-def transformed_params2rendervar(params, transformed_pts):
+def transformed_params2rendervar(params, transformed_gaussians):
+    # Check if Gaussians are Isotropic
+    if params['log_scales'].shape[1] == 1:
+        log_scales = torch.tile(params['log_scales'], (1, 3))
+    else:
+        log_scales = params['log_scales']
+    # Initialize Render Variables
     rendervar = {
-        'means3D': transformed_pts,
+        'means3D': transformed_gaussians['means3D'],
         'colors_precomp': params['rgb_colors'],
-        'rotations': F.normalize(params['unnorm_rotations']),
+        'rotations': F.normalize(transformed_gaussians['unnorm_rotations']),
         'opacities': torch.sigmoid(params['logit_opacities']),
-        'scales': torch.exp(torch.tile(params['log_scales'], (1, 3))),
+        'scales': torch.exp(log_scales),
         'means2D': torch.zeros_like(params['means3D'], requires_grad=True, device="cuda") + 0
     }
     return rendervar
@@ -142,6 +154,12 @@ def project_points(points_3d, intrinsics):
     return points_2d
 
 def params2silhouette(params):
+    # Check if Gaussians are Isotropic
+    if params['log_scales'].shape[1] == 1:
+        log_scales = torch.tile(params['log_scales'], (1, 3))
+    else:
+        log_scales = params['log_scales']
+    # Initialize Render Variables
     sil_color = torch.zeros_like(params['rgb_colors'])
     sil_color[:, 0] = 1.0
     rendervar = {
@@ -149,21 +167,27 @@ def params2silhouette(params):
         'colors_precomp': sil_color,
         'rotations': F.normalize(params['unnorm_rotations']),
         'opacities': torch.sigmoid(params['logit_opacities']),
-        'scales': torch.exp(torch.tile(params['log_scales'], (1, 3))),
+        'scales': torch.exp(log_scales),
         'means2D': torch.zeros_like(params['means3D'], requires_grad=True, device="cuda") + 0
     }
     return rendervar
 
 
-def transformed_params2silhouette(params, transformed_pts):
+def transformed_params2silhouette(params, transformed_gaussians):
+    # Check if Gaussians are Isotropic
+    if params['log_scales'].shape[1] == 1:
+        log_scales = torch.tile(params['log_scales'], (1, 3))
+    else:
+        log_scales = params['log_scales']
+    # Initialize Render Variables
     sil_color = torch.zeros_like(params['rgb_colors'])
     sil_color[:, 0] = 1.0
     rendervar = {
-        'means3D': transformed_pts,
+        'means3D': transformed_gaussians['means3D'],
         'colors_precomp': sil_color,
-        'rotations': F.normalize(params['unnorm_rotations']),
+        'rotations': F.normalize(transformed_gaussians['unnorm_rotations']),
         'opacities': torch.sigmoid(params['logit_opacities']),
-        'scales': torch.exp(torch.tile(params['log_scales'], (1, 3))),
+        'scales': torch.exp(log_scales),
         'means2D': torch.zeros_like(params['means3D'], requires_grad=True, device="cuda") + 0
     }
     return rendervar
@@ -190,24 +214,36 @@ def get_depth_and_silhouette(pts_3D, w2c):
 
 
 def params2depthplussilhouette(params, w2c):
+    # Check if Gaussians are Isotropic
+    if params['log_scales'].shape[1] == 1:
+        log_scales = torch.tile(params['log_scales'], (1, 3))
+    else:
+        log_scales = params['log_scales']
+    # Initialize Render Variables
     rendervar = {
         'means3D': params['means3D'],
         'colors_precomp': get_depth_and_silhouette(params['means3D'], w2c),
         'rotations': F.normalize(params['unnorm_rotations']),
         'opacities': torch.sigmoid(params['logit_opacities']),
-        'scales': torch.exp(torch.tile(params['log_scales'], (1, 3))),
+        'scales': torch.exp(log_scales),
         'means2D': torch.zeros_like(params['means3D'], requires_grad=True, device="cuda") + 0
     }
     return rendervar
 
 
-def transformed_params2depthplussilhouette(params, w2c, transformed_pts):
+def transformed_params2depthplussilhouette(params, w2c, transformed_gaussians):
+    # Check if Gaussians are Isotropic
+    if params['log_scales'].shape[1] == 1:
+        log_scales = torch.tile(params['log_scales'], (1, 3))
+    else:
+        log_scales = params['log_scales']
+    # Initialize Render Variables
     rendervar = {
-        'means3D': transformed_pts,
-        'colors_precomp': get_depth_and_silhouette(transformed_pts, w2c),
-        'rotations': F.normalize(params['unnorm_rotations']),
+        'means3D': transformed_gaussians['means3D'],
+        'colors_precomp': get_depth_and_silhouette(transformed_gaussians['means3D'], w2c),
+        'rotations': F.normalize(transformed_gaussians['unnorm_rotations']),
         'opacities': torch.sigmoid(params['logit_opacities']),
-        'scales': torch.exp(torch.tile(params['log_scales'], (1, 3))),
+        'scales': torch.exp(log_scales),
         'means2D': torch.zeros_like(params['means3D'], requires_grad=True, device="cuda") + 0
     }
     return rendervar
@@ -215,7 +251,7 @@ def transformed_params2depthplussilhouette(params, w2c, transformed_pts):
 
 def transform_to_frame(params, time_idx, gaussians_grad, camera_grad):
     """
-    Function to transform Isotropic Gaussians from world frame to camera frame.
+    Function to transform Isotropic or Anisotropic Gaussians from world frame to camera frame.
     
     Args:
         params: dict of parameters
@@ -224,7 +260,7 @@ def transform_to_frame(params, time_idx, gaussians_grad, camera_grad):
         camera_grad: enable gradients for camera pose
     
     Returns:
-        transformed_pts: Transformed Centers of Gaussians
+        transformed_gaussians: Transformed Gaussians (dict containing means3D & unnorm_rotations)
     """
     # Get Frame Camera Pose
     if camera_grad:
@@ -237,15 +273,32 @@ def transform_to_frame(params, time_idx, gaussians_grad, camera_grad):
     rel_w2c[:3, :3] = build_rotation(cam_rot)
     rel_w2c[:3, 3] = cam_tran
 
-    # Get Centers and norm Rots of Gaussians in World Frame
+    # Check if Gaussians need to be rotated (Isotropic or Anisotropic)
+    if params['log_scales'].shape[1] == 1:
+        transform_rots = False # Isotropic Gaussians
+    else:
+        transform_rots = True # Anisotropic Gaussians
+    
+    # Get Centers and Unnorm Rots of Gaussians in World Frame
     if gaussians_grad:
         pts = params['means3D']
+        unnorm_rots = params['unnorm_rotations']
     else:
         pts = params['means3D'].detach()
+        unnorm_rots = params['unnorm_rotations'].detach()
     
-    # Transform Centers and Unnorm Rots of Gaussians to Camera Frame
+    transformed_gaussians = {}
+    # Transform Centers of Gaussians to Camera Frame
     pts_ones = torch.ones(pts.shape[0], 1).cuda().float()
     pts4 = torch.cat((pts, pts_ones), dim=1)
     transformed_pts = (rel_w2c @ pts4.T).T[:, :3]
+    transformed_gaussians['means3D'] = transformed_pts
+    # Transform Rots of Gaussians to Camera Frame
+    if transform_rots:
+        norm_rots = F.normalize(unnorm_rots)
+        transformed_rots = quat_mult(cam_rot, norm_rots)
+        transformed_gaussians['unnorm_rotations'] = transformed_rots
+    else:
+        transformed_gaussians['unnorm_rotations'] = unnorm_rots
 
-    return transformed_pts
+    return transformed_gaussians

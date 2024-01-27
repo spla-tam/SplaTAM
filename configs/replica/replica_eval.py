@@ -30,6 +30,7 @@ config = dict(
     eval_every=5, # Evaluate every nth frame (at end of SLAM)
     scene_radius_depth_ratio=3, # Max First Frame Depth to Scene Radius Ratio (For Pruning/Densification)
     mean_sq_dist_method="projective", # ["projective", "knn"] (Type of Mean Squared Distance Calculation for Scale of Gaussians)
+    gaussian_distribution="isotropic", # ["isotropic", "anisotropic"] (Isotropic -> Spherical Covariance, Anisotropic -> Ellipsoidal Covariance)
     report_iter_progress=False,
     load_checkpoint=False,
     checkpoint_time_idx=0,

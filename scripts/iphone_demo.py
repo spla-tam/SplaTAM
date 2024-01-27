@@ -31,6 +31,7 @@ from utils.eval_helpers import report_progress
 from utils.keyframe_selection import keyframe_selection_overlap
 from utils.recon_helpers import setup_camera
 from utils.slam_external import build_rotation, prune_gaussians, densify
+from utils.slam_helpers import matrix_to_quaternion
 from scripts.splatam import get_loss, initialize_optimizer, initialize_params, initialize_camera_pose, get_pointcloud, add_new_gaussians
 
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
@@ -254,7 +255,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                 init_pt_cld, mean3_sq_dist = get_pointcloud(densify_color, densify_depth, densify_intrinsics, first_frame_w2c, 
                                                             mask=mask, compute_mean_sq_dist=True, 
                                                             mean_sq_dist_method=config['mean_sq_dist_method'])
-                params, variables = initialize_params(init_pt_cld, num_frames, mean3_sq_dist)
+                params, variables = initialize_params(init_pt_cld, num_frames, mean3_sq_dist, config['gaussian_distribution'])
                 variables['scene_radius'] = torch.max(densify_depth)/config['scene_radius_depth_ratio']
             
             # Initialize Mapping & Tracking for current frame
@@ -368,7 +369,7 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                     # Add new Gaussians to the scene based on the Silhouette
                     params, variables = add_new_gaussians(params, variables, densify_curr_data, 
                                                         config['mapping']['sil_thres'], time_idx,
-                                                        config['mean_sq_dist_method'])
+                                                        config['mean_sq_dist_method'], config['gaussian_distribution'])
                 
                 with torch.no_grad():
                     # Get the current estimated rotation & translation
@@ -560,5 +561,7 @@ if __name__ == "__main__":
         shutil.copy(args.config, os.path.join(results_dir, "config.py"))
 
     config = experiment.config
+    if "gaussian_distribution" not in config:
+        config['gaussian_distribution'] = "isotropic"
     dataset_capture_loop(reader, Path(config['workdir']), config['overwrite'], 
                          config['num_frames'], config['depth_scale'], config)
