@@ -683,7 +683,7 @@ def eval_nvs(dataset, final_params, num_frames, eval_dir, sil_thres,
         if transform_rots:
             norm_rots = F.normalize(final_params['unnorm_rotations'].detach())
             gt_cam_rot = matrix_to_quaternion(gt_w2c[:3, :3])
-            gt_cam_rot = F.normalize(gt_cam_rot)
+            gt_cam_rot = F.normalize(gt_cam_rot.unsqueeze(0))
             transformed_rots = quat_mult(gt_cam_rot, norm_rots)
             transformed_gaussians['unnorm_rotations'] = transformed_rots
         else:
