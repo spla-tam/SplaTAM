@@ -32,7 +32,7 @@ from datasets.gradslam_datasets import (
     ScannetPPDataset,
     NeRFCaptureDataset
 )
-from utils.common_utils import seed_everything, save_seq_params
+from utils.common_utils import seed_everything,save_params
 from utils.recon_helpers import setup_camera
 from utils.gs_helpers import (
     params2rendervar, params2depthplussilhouette,
@@ -126,17 +126,23 @@ def get_pointcloud(color, depth, intrinsics, w2c, transform_pts=True,
         return point_cld
 
 
-def initialize_params(init_pt_cld, num_frames, mean3_sq_dist):
+def initialize_params(init_pt_cld, num_frames, mean3_sq_dist, gaussian_distribution):
     num_pts = init_pt_cld.shape[0]
     means3D = init_pt_cld[:, :3] # [num_gaussians, 3]
-    unnorm_rots = np.tile([1, 0, 0, 0], (num_pts, 1)) # [num_gaussians, 3]
+    unnorm_rots = np.tile([1, 0, 0, 0], (num_pts, 1)) # [num_gaussians, 4]
     logit_opacities = torch.zeros((num_pts, 1), dtype=torch.float, device="cuda")
+    if gaussian_distribution == "isotropic":
+        log_scales = torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 1))
+    elif gaussian_distribution == "anisotropic":
+        log_scales = torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 3))
+    else:
+        raise ValueError(f"Unknown gaussian_distribution {gaussian_distribution}")
     params = {
         'means3D': means3D,
         'rgb_colors': init_pt_cld[:, 3:6],
         'unnorm_rotations': unnorm_rots,
         'logit_opacities': logit_opacities,
-        'log_scales': torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 1)),
+        'log_scales': log_scales,
     }
 
     # Initialize a single gaussian trajectory to model the camera poses relative to the first frame
@@ -166,7 +172,7 @@ def initialize_optimizer(params, lrs_dict):
     return torch.optim.Adam(param_groups, lr=0.0, eps=1e-15)
 
 
-def initialize_first_timestep(dataset, num_frames, lrs_dict, mean_sq_dist_method):
+def initialize_first_timestep(dataset, num_frames, lrs_dict, mean_sq_dist_method, gaussian_distribution):
     # Get RGB-D Data & Camera Parameters
     color, depth, intrinsics, pose = dataset[0]
 
@@ -189,7 +195,7 @@ def initialize_first_timestep(dataset, num_frames, lrs_dict, mean_sq_dist_method
                                                 mean_sq_dist_method=mean_sq_dist_method)
 
     # Initialize Parameters & Optimizer
-    params, variables = initialize_params(init_pt_cld, num_frames, mean3_sq_dist)
+    params, variables = initialize_params(init_pt_cld, num_frames, mean3_sq_dist, gaussian_distribution)
     optimizer = initialize_optimizer(params, lrs_dict)
 
     # Initialize an estimate of scene radius for Gaussian-Splatting Densification
@@ -237,17 +243,23 @@ def get_loss_gs(params, curr_data, variables, loss_weights):
     return loss, variables, weighted_losses
 
 
-def initialize_new_params(new_pt_cld, mean3_sq_dist):
+def initialize_new_params(new_pt_cld, mean3_sq_dist, gaussian_distribution):
     num_pts = new_pt_cld.shape[0]
     means3D = new_pt_cld[:, :3] # [num_gaussians, 3]
-    unnorm_rots = np.tile([1, 0, 0, 0], (num_pts, 1)) # [num_gaussians, 3]
+    unnorm_rots = np.tile([1, 0, 0, 0], (num_pts, 1)) # [num_gaussians, 4]
     logit_opacities = torch.zeros((num_pts, 1), dtype=torch.float, device="cuda")
+    if gaussian_distribution == "isotropic":
+        log_scales = torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 1))
+    elif gaussian_distribution == "anisotropic":
+        log_scales = torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 3))
+    else:
+        raise ValueError(f"Unknown gaussian_distribution {gaussian_distribution}")
     params = {
         'means3D': means3D,
         'rgb_colors': new_pt_cld[:, 3:6],
         'unnorm_rotations': unnorm_rots,
         'logit_opacities': logit_opacities,
-        'log_scales': torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 1)),
+        'log_scales': log_scales,
     }
     for k, v in params.items():
         # Check if value is already a torch tensor
@@ -258,27 +270,12 @@ def initialize_new_params(new_pt_cld, mean3_sq_dist):
     return params
 
 
-def infill_depth(depth, inpaint_radius=1):
-    """
-    Function to infill Depth for invalid regions
-    Input:
-        depth: Depth Image (Numpy)
-        radius: Radius of the circular neighborhood for infilling
-    Output:
-        depth: Depth Image with invalid regions infilled (Numpy)
-    """
-    invalid_mask = (depth == 0)
-    invalid_mask = invalid_mask.astype(np.uint8)
-    filled_depth = cv2.inpaint(depth, invalid_mask, inpaint_radius, cv2.INPAINT_NS)
-
-    return filled_depth
-
-
-def add_new_gaussians(params, variables, curr_data, sil_thres, time_idx, mean_sq_dist_method):
+def add_new_gaussians(params, variables, curr_data, sil_thres, 
+                      time_idx, mean_sq_dist_method, gaussian_distribution):
     # Silhouette Rendering
-    transformed_pts = transform_to_frame(params, time_idx, gaussians_grad=False, camera_grad=False)
+    transformed_gaussians = transform_to_frame(params, time_idx, gaussians_grad=False, camera_grad=False)
     depth_sil_rendervar = transformed_params2depthplussilhouette(params, curr_data['w2c'],
-                                                                 transformed_pts)
+                                                                 transformed_gaussians)
     depth_sil, _, _, = Renderer(raster_settings=curr_data['cam'])(**depth_sil_rendervar)
     silhouette = depth_sil[1, :, :]
     non_presence_sil_mask = (silhouette < sil_thres)
@@ -289,9 +286,6 @@ def add_new_gaussians(params, variables, curr_data, sil_thres, time_idx, mean_sq
     non_presence_depth_mask = (render_depth > gt_depth) * (depth_error > 50*depth_error.median())
     # Determine non-presence mask
     non_presence_mask = non_presence_sil_mask | non_presence_depth_mask
-    # Infill Depth for invalid regions of GT Depth
-    infilled_gt_depth = infill_depth(curr_data['depth'][0, :, :].detach().cpu().numpy())
-    infilled_gt_depth = torch.tensor(infilled_gt_depth).cuda().float().unsqueeze(0)
     # Flatten mask
     non_presence_mask = non_presence_mask.reshape(-1)
 
@@ -303,12 +297,12 @@ def add_new_gaussians(params, variables, curr_data, sil_thres, time_idx, mean_sq
         curr_w2c = torch.eye(4).cuda().float()
         curr_w2c[:3, :3] = build_rotation(curr_cam_rot)
         curr_w2c[:3, 3] = curr_cam_tran
-        valid_depth_mask = (infilled_gt_depth > 0)
+        valid_depth_mask = (curr_data['depth'][0, :, :] > 0)
         non_presence_mask = non_presence_mask & valid_depth_mask.reshape(-1)
-        new_pt_cld, mean3_sq_dist = get_pointcloud(curr_data['im'], infilled_gt_depth, curr_data['intrinsics'], 
+        new_pt_cld, mean3_sq_dist = get_pointcloud(curr_data['im'], curr_data['depth'], curr_data['intrinsics'], 
                                     curr_w2c, mask=non_presence_mask, compute_mean_sq_dist=True,
                                     mean_sq_dist_method=mean_sq_dist_method)
-        new_params = initialize_new_params(new_pt_cld, mean3_sq_dist)
+        new_params = initialize_new_params(new_pt_cld, mean3_sq_dist, gaussian_distribution)
         for k, v in new_params.items():
             params[k] = torch.nn.Parameter(torch.cat((params[k], v), dim=0).requires_grad_(True))
         num_pts = params['means3D'].shape[0]
@@ -329,9 +323,11 @@ def convert_params_to_store(params):
     return params_to_store
 
 
-def rgbd_slam(config: dict):
+def offline_splatting(config: dict):
     # Print Config
     print("Loaded Config:")
+    if "gaussian_distribution" not in config:
+        config['gaussian_distribution'] = "anisotropic"
     print(f"{config}")
 
     # Init WandB
@@ -417,7 +413,8 @@ def rgbd_slam(config: dict):
     # Initialize Parameters, Optimizer & Canoncial Camera parameters
     params, variables, optimizer, intrinsics, w2c, cam = initialize_first_timestep(dataset, num_frames, 
                                                                                    config['train']['lrs_mapping'],
-                                                                                   config['mean_sq_dist_method'])
+                                                                                   config['mean_sq_dist_method'],
+                                                                                   config['gaussian_distribution'])
 
     _, _, map_intrinsics, _ = mapping_dataset[0]
 
@@ -491,7 +488,7 @@ def rgbd_slam(config: dict):
         if time_idx > 0:
             params, variables = add_new_gaussians(params, variables, curr_data, 
                                                   config['train']['sil_thres'], time_idx,
-                                                  config['mean_sq_dist_method'])
+                                                  config['mean_sq_dist_method'], config['gaussian_distribution'])
         post_num_pts = params['means3D'].shape[0]
         if config['use_wandb']:
             wandb_run.log({"Init/Number of Gaussians": post_num_pts,
@@ -595,8 +592,7 @@ def rgbd_slam(config: dict):
     params['gt_w2c_all_frames'] = np.stack(params['gt_w2c_all_frames'], axis=0)
     
     # Save Parameters
-    all_params = [params]
-    save_seq_params(all_params, output_dir)
+    save_params(params, output_dir)
 
     # Close WandB Run
     if config['use_wandb']:
@@ -623,4 +619,4 @@ if __name__ == "__main__":
     os.makedirs(results_dir, exist_ok=True)
     shutil.copy(args.experiment, os.path.join(results_dir, "config.py"))
 
-    rgbd_slam(experiment.config)
+    offline_splatting(experiment.config)

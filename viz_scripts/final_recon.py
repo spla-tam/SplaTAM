@@ -66,22 +66,26 @@ def load_scene_data(scene_path, first_frame_w2c, intrinsics):
         rel_w2c[:3, 3] = cam_tran
         all_w2cs.append(rel_w2c.cpu().numpy())
 
-    transformed_pts = params['means3D']
+    # Check if Gaussians are Isotropic or Anisotropic
+    if params['log_scales'].shape[-1] == 1:
+        log_scales = torch.tile(params['log_scales'], (1, 3))
+    else:
+        log_scales = params['log_scales']
 
     rendervar = {
-        'means3D': transformed_pts,
+        'means3D': params['means3D'],
         'colors_precomp': params['rgb_colors'],
         'rotations': torch.nn.functional.normalize(params['unnorm_rotations']),
         'opacities': torch.sigmoid(params['logit_opacities']),
-        'scales': torch.exp(torch.tile(params['log_scales'], (1, 3))),
+        'scales': torch.exp(log_scales),
         'means2D': torch.zeros_like(params['means3D'], device="cuda")
     }
     depth_rendervar = {
-        'means3D': transformed_pts,
-        'colors_precomp': get_depth_and_silhouette(transformed_pts, first_frame_w2c),
+        'means3D': params['means3D'],
+        'colors_precomp': get_depth_and_silhouette(params['means3D'], first_frame_w2c),
         'rotations': torch.nn.functional.normalize(params['unnorm_rotations']),
         'opacities': torch.sigmoid(params['logit_opacities']),
-        'scales': torch.exp(torch.tile(params['log_scales'], (1, 3))),
+        'scales': torch.exp(log_scales),
         'means2D': torch.zeros_like(params['means3D'], device="cuda")
     }
     return rendervar, depth_rendervar, all_w2cs

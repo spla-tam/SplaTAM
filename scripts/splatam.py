@@ -128,17 +128,23 @@ def get_pointcloud(color, depth, intrinsics, w2c, transform_pts=True,
         return point_cld
 
 
-def initialize_params(init_pt_cld, num_frames, mean3_sq_dist):
+def initialize_params(init_pt_cld, num_frames, mean3_sq_dist, gaussian_distribution):
     num_pts = init_pt_cld.shape[0]
     means3D = init_pt_cld[:, :3] # [num_gaussians, 3]
-    unnorm_rots = np.tile([1, 0, 0, 0], (num_pts, 1)) # [num_gaussians, 3]
+    unnorm_rots = np.tile([1, 0, 0, 0], (num_pts, 1)) # [num_gaussians, 4]
     logit_opacities = torch.zeros((num_pts, 1), dtype=torch.float, device="cuda")
+    if gaussian_distribution == "isotropic":
+        log_scales = torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 1))
+    elif gaussian_distribution == "anisotropic":
+        log_scales = torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 3))
+    else:
+        raise ValueError(f"Unknown gaussian_distribution {gaussian_distribution}")
     params = {
         'means3D': means3D,
         'rgb_colors': init_pt_cld[:, 3:6],
         'unnorm_rotations': unnorm_rots,
         'logit_opacities': logit_opacities,
-        'log_scales': torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 1)),
+        'log_scales': log_scales,
     }
 
     # Initialize a single gaussian trajectory to model the camera poses relative to the first frame
@@ -171,7 +177,8 @@ def initialize_optimizer(params, lrs_dict, tracking):
         return torch.optim.Adam(param_groups, lr=0.0, eps=1e-15)
 
 
-def initialize_first_timestep(dataset, num_frames, scene_radius_depth_ratio, mean_sq_dist_method, densify_dataset=None):
+def initialize_first_timestep(dataset, num_frames, scene_radius_depth_ratio, 
+                              mean_sq_dist_method, densify_dataset=None, gaussian_distribution=None):
     # Get RGB-D Data & Camera Parameters
     color, depth, intrinsics, pose = dataset[0]
 
@@ -204,7 +211,7 @@ def initialize_first_timestep(dataset, num_frames, scene_radius_depth_ratio, mea
                                                 mean_sq_dist_method=mean_sq_dist_method)
 
     # Initialize Parameters
-    params, variables = initialize_params(init_pt_cld, num_frames, mean3_sq_dist)
+    params, variables = initialize_params(init_pt_cld, num_frames, mean3_sq_dist, gaussian_distribution)
 
     # Initialize an estimate of scene radius for Gaussian-Splatting Densification
     variables['scene_radius'] = torch.max(depth)/scene_radius_depth_ratio
@@ -216,37 +223,37 @@ def initialize_first_timestep(dataset, num_frames, scene_radius_depth_ratio, mea
 
 
 def get_loss(params, curr_data, variables, iter_time_idx, loss_weights, use_sil_for_loss,
-             sil_thres, use_l1,ignore_outlier_depth_loss, tracking=False, 
+             sil_thres, use_l1, ignore_outlier_depth_loss, tracking=False, 
              mapping=False, do_ba=False, plot_dir=None, visualize_tracking_loss=False, tracking_iteration=None):
     # Initialize Loss Dictionary
     losses = {}
 
     if tracking:
         # Get current frame Gaussians, where only the camera pose gets gradient
-        transformed_pts = transform_to_frame(params, iter_time_idx, 
+        transformed_gaussians = transform_to_frame(params, iter_time_idx, 
                                              gaussians_grad=False,
                                              camera_grad=True)
     elif mapping:
         if do_ba:
             # Get current frame Gaussians, where both camera pose and Gaussians get gradient
-            transformed_pts = transform_to_frame(params, iter_time_idx,
+            transformed_gaussians = transform_to_frame(params, iter_time_idx,
                                                  gaussians_grad=True,
                                                  camera_grad=True)
         else:
             # Get current frame Gaussians, where only the Gaussians get gradient
-            transformed_pts = transform_to_frame(params, iter_time_idx,
+            transformed_gaussians = transform_to_frame(params, iter_time_idx,
                                                  gaussians_grad=True,
                                                  camera_grad=False)
     else:
         # Get current frame Gaussians, where only the Gaussians get gradient
-        transformed_pts = transform_to_frame(params, iter_time_idx,
+        transformed_gaussians = transform_to_frame(params, iter_time_idx,
                                              gaussians_grad=True,
                                              camera_grad=False)
 
     # Initialize Render Variables
-    rendervar = transformed_params2rendervar(params, transformed_pts)
+    rendervar = transformed_params2rendervar(params, transformed_gaussians)
     depth_sil_rendervar = transformed_params2depthplussilhouette(params, curr_data['w2c'],
-                                                                 transformed_pts)
+                                                                 transformed_gaussians)
 
     # RGB Rendering
     rendervar['means2D'].retain_grad()
@@ -351,17 +358,23 @@ def get_loss(params, curr_data, variables, iter_time_idx, loss_weights, use_sil_
     return loss, variables, weighted_losses
 
 
-def initialize_new_params(new_pt_cld, mean3_sq_dist):
+def initialize_new_params(new_pt_cld, mean3_sq_dist, gaussian_distribution):
     num_pts = new_pt_cld.shape[0]
     means3D = new_pt_cld[:, :3] # [num_gaussians, 3]
-    unnorm_rots = np.tile([1, 0, 0, 0], (num_pts, 1)) # [num_gaussians, 3]
+    unnorm_rots = np.tile([1, 0, 0, 0], (num_pts, 1)) # [num_gaussians, 4]
     logit_opacities = torch.zeros((num_pts, 1), dtype=torch.float, device="cuda")
+    if gaussian_distribution == "isotropic":
+        log_scales = torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 1))
+    elif gaussian_distribution == "anisotropic":
+        log_scales = torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 3))
+    else:
+        raise ValueError(f"Unknown gaussian_distribution {gaussian_distribution}")
     params = {
         'means3D': means3D,
         'rgb_colors': new_pt_cld[:, 3:6],
         'unnorm_rotations': unnorm_rots,
         'logit_opacities': logit_opacities,
-        'log_scales': torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 1)),
+        'log_scales': log_scales,
     }
     for k, v in params.items():
         # Check if value is already a torch tensor
@@ -373,11 +386,12 @@ def initialize_new_params(new_pt_cld, mean3_sq_dist):
     return params
 
 
-def add_new_gaussians(params, variables, curr_data, sil_thres, time_idx, mean_sq_dist_method):
+def add_new_gaussians(params, variables, curr_data, sil_thres, 
+                      time_idx, mean_sq_dist_method, gaussian_distribution):
     # Silhouette Rendering
-    transformed_pts = transform_to_frame(params, time_idx, gaussians_grad=False, camera_grad=False)
+    transformed_gaussians = transform_to_frame(params, time_idx, gaussians_grad=False, camera_grad=False)
     depth_sil_rendervar = transformed_params2depthplussilhouette(params, curr_data['w2c'],
-                                                                 transformed_pts)
+                                                                 transformed_gaussians)
     depth_sil, _, _, = Renderer(raster_settings=curr_data['cam'])(**depth_sil_rendervar)
     silhouette = depth_sil[1, :, :]
     non_presence_sil_mask = (silhouette < sil_thres)
@@ -404,7 +418,7 @@ def add_new_gaussians(params, variables, curr_data, sil_thres, time_idx, mean_sq
         new_pt_cld, mean3_sq_dist = get_pointcloud(curr_data['im'], curr_data['depth'], curr_data['intrinsics'], 
                                     curr_w2c, mask=non_presence_mask, compute_mean_sq_dist=True,
                                     mean_sq_dist_method=mean_sq_dist_method)
-        new_params = initialize_new_params(new_pt_cld, mean3_sq_dist)
+        new_params = initialize_new_params(new_pt_cld, mean3_sq_dist, gaussian_distribution)
         for k, v in new_params.items():
             params[k] = torch.nn.Parameter(torch.cat((params[k], v), dim=0).requires_grad_(True))
         num_pts = params['means3D'].shape[0]
@@ -457,6 +471,8 @@ def rgbd_slam(config: dict):
         config['tracking']['depth_loss_thres'] = 100000
     if "visualize_tracking_loss" not in config['tracking']:
         config['tracking']['visualize_tracking_loss'] = False
+    if "gaussian_distribution" not in config:
+        config['gaussian_distribution'] = "isotropic"
     print(f"{config}")
 
     # Create Output Directories
@@ -550,12 +566,14 @@ def rgbd_slam(config: dict):
             densify_intrinsics, densify_cam = initialize_first_timestep(dataset, num_frames,
                                                                         config['scene_radius_depth_ratio'],
                                                                         config['mean_sq_dist_method'],
-                                                                        densify_dataset=densify_dataset)                                                                                                                  
+                                                                        densify_dataset=densify_dataset,
+                                                                        gaussian_distribution=config['gaussian_distribution'])                                                                                                                  
     else:
         # Initialize Parameters & Canoncial Camera parameters
         params, variables, intrinsics, first_frame_w2c, cam = initialize_first_timestep(dataset, num_frames, 
                                                                                         config['scene_radius_depth_ratio'],
-                                                                                        config['mean_sq_dist_method'])
+                                                                                        config['mean_sq_dist_method'],
+                                                                                        gaussian_distribution=config['gaussian_distribution'])
     
     # Init seperate dataloader for tracking if required
     if seperate_tracking_res:
@@ -784,7 +802,7 @@ def rgbd_slam(config: dict):
                 # Add new Gaussians to the scene based on the Silhouette
                 params, variables = add_new_gaussians(params, variables, densify_curr_data, 
                                                       config['mapping']['sil_thres'], time_idx,
-                                                      config['mean_sq_dist_method'])
+                                                      config['mean_sq_dist_method'], config['gaussian_distribution'])
                 post_num_pts = params['means3D'].shape[0]
                 if config['use_wandb']:
                     wandb_run.log({"Mapping/Number of Gaussians": post_num_pts,
