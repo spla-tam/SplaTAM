@@ -32,7 +32,7 @@ from datasets.gradslam_datasets import (
     ScannetPPDataset,
     NeRFCaptureDataset
 )
-from utils.common_utils import seed_everything, save_seq_params
+from utils.common_utils import seed_everything,save_params
 from utils.recon_helpers import setup_camera
 from utils.gs_helpers import (
     params2rendervar, params2depthplussilhouette,
@@ -592,8 +592,7 @@ def offline_splatting(config: dict):
     params['gt_w2c_all_frames'] = np.stack(params['gt_w2c_all_frames'], axis=0)
     
     # Save Parameters
-    all_params = [params]
-    save_seq_params(all_params, output_dir)
+    save_params(params, output_dir)
 
     # Close WandB Run
     if config['use_wandb']:

@@ -13,9 +13,6 @@ os.environ["SCENE"] = "0"
 # Train Split Eval
 use_train_split = True
 
-# # Novel View Synthesis Eval
-# use_train_split = False
-
 if use_train_split:
     scene_num_frames = [-1, 360]
 else:
@@ -24,13 +21,18 @@ else:
 scene_name = scenes[int(os.environ["SCENE"])]
 num_frames = scene_num_frames[int(os.environ["SCENE"])]
 
+full_res_width = 1168
+full_res_height = 1752
+downscale_factor = 2.0
+densify_downscale_factor = 4.0
+
 map_every = 1
 keyframe_every = 5
 mapping_window_size = 24
 tracking_iters = 200
 mapping_iters = 60
 
-group_name = "ScanNet++"
+group_name = "ScanNet++_3DGS"
 run_name = f"{scene_name}_{seed}"
 
 config = dict(
@@ -42,7 +44,7 @@ config = dict(
     keyframe_every=keyframe_every, # Keyframe every nth frame
     mapping_window_size=mapping_window_size, # Mapping window size
     report_global_progress_every=5, # Report Global Progress every nth frame
-    eval_every=1, # Evaluate every nth frame (at end of SLAM)
+    eval_every=5, # Evaluate every nth frame (at end of SLAM)
     scene_radius_depth_ratio=3, # Max First Frame Depth to Scene Radius Ratio (For Pruning/Densification)
     mean_sq_dist_method="projective", # ["projective", "knn"] (Type of Mean Squared Distance Calculation for Scale of Gaussians)
     gaussian_distribution="isotropic", # ["isotropic", "anisotropic"] (Isotropic -> Spherical Covariance, Anisotropic -> Ellipsoidal Covariance)
@@ -54,7 +56,7 @@ config = dict(
     use_wandb=True,
     wandb=dict(
         entity="theairlab",
-        project="SplaTAM",
+        project="SplaTAM_CVPR_Rebuttal",
         group=group_name,
         name=run_name,
         save_qual=False,
@@ -62,89 +64,51 @@ config = dict(
     ),
     data=dict(
         dataset_name="scannetpp",
-        basedir="./data/ScanNet++/data",
+        basedir="/storage2/datasets/nkeetha/4d/data/ScanNetPP/data",
         sequence=scene_name,
         ignore_bad=False,
-        use_train_split=use_train_split,
+        use_train_split=True,
         desired_image_height=584,
         desired_image_width=876,
+        desired_image_height_init=584,
+        desired_image_width_init=876,
         start=0,
         end=-1,
         stride=1,
         num_frames=num_frames,
+        eval_stride=1,
+        eval_num_frames=-1,
     ),
-    tracking=dict(
-        use_gt_poses=False, # Use GT Poses for Tracking
-        forward_prop=True, # Forward Propagate Poses
-        visualize_tracking_loss=False, # Visualize Tracking Diff Images
-        num_iters=tracking_iters,
-        use_sil_for_loss=True,
-        sil_thres=0.99,
-        use_l1=True,
-        use_depth_loss_thres=True,
-        depth_loss_thres=20000, # Num of Tracking Iters becomes twice if this value is not met
-        ignore_outlier_depth_loss=False,
-        use_uncertainty_for_loss_mask=False,
-        use_uncertainty_for_loss=False,
-        use_chamfer=False,
+    train=dict(
+        num_iters_mapping=7000,
+        sil_thres=0.5, # For Addition of new Gaussians & Visualization
+        use_sil_for_loss=True, # Use Silhouette for Loss during Tracking
         loss_weights=dict(
-            im=0.5,
-            depth=1.0,
+            im=1.0,
+            depth=0.0,
         ),
-        lrs=dict(
-            means3D=0.0,
-            rgb_colors=0.0,
-            unnorm_rotations=0.0,
-            logit_opacities=0.0,
-            log_scales=0.0,
-            cam_unnorm_rots=0.001,
-            cam_trans=0.004,
-        ),
-    ),
-    mapping=dict(
-        num_iters=mapping_iters,
-        add_new_gaussians=True,
-        sil_thres=0.5, # For Addition of new Gaussians
-        use_l1=True,
-        ignore_outlier_depth_loss=False,
-        use_sil_for_loss=False,
-        use_uncertainty_for_loss_mask=False,
-        use_uncertainty_for_loss=False,
-        use_chamfer=False,
-        loss_weights=dict(
-            im=0.5,
-            depth=1.0,
-        ),
-        lrs=dict(
-            means3D=0.0001,
+        lrs_mapping=dict(
+            means3D=0.00032,
             rgb_colors=0.0025,
             unnorm_rotations=0.001,
             logit_opacities=0.05,
-            log_scales=0.001,
+            log_scales=0.005,
             cam_unnorm_rots=0.0000,
             cam_trans=0.0000,
         ),
-        prune_gaussians=True, # Prune Gaussians during Mapping
-        pruning_dict=dict( # Needs to be updated based on the number of mapping iterations
-            start_after=0,
-            remove_big_after=0,
-            stop_after=20,
-            prune_every=20,
-            removal_opacity_threshold=0.005,
-            final_removal_opacity_threshold=0.005,
-            reset_opacities=False,
-            reset_opacities_every=500, # Doesn't consider iter 0
-        ),
-        use_gaussian_splatting_densification=False, # Use Gaussian Splatting-based Densification during Mapping
+        lrs_mapping_means3D_final=0.0000032,
+        lr_delay_mult=0.01,
+        use_gaussian_splatting_densification=True, # Use Gaussian Splatting-based Densification during Mapping
         densify_dict=dict( # Needs to be updated based on the number of mapping iterations
             start_after=500,
             remove_big_after=3000,
-            stop_after=5000,
+            stop_after=15000,
             densify_every=100,
             grad_thresh=0.0002,
             num_to_split_into=2,
             removal_opacity_threshold=0.005,
             final_removal_opacity_threshold=0.005,
+            reset_opacities=True,
             reset_opacities_every=3000, # Doesn't consider iter 0
         ),
     ),

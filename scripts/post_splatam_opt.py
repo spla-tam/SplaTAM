@@ -15,6 +15,7 @@ for p in sys.path:
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from tqdm import tqdm
 import wandb
 
@@ -39,9 +40,8 @@ from utils.gs_helpers import (
 )
 from utils.gs_external import (
     calc_ssim, densify,
-    get_expon_lr_func, update_learning_rate
+    get_expon_lr_func, update_learning_rate, build_rotation
 )
-
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 
 
@@ -102,7 +102,7 @@ def initialize_first_timestep_from_ckpt(ckpt_path,dataset, num_frames, lrs_dict,
     params = dict(np.load(ckpt_path, allow_pickle=True))
     variables = {}
 
-    for k in ['intrinsics', 'w2c', 'org_width', 'org_height', 'gt_w2c_all_frames']:
+    for k in ['intrinsics', 'w2c', 'org_width', 'org_height', 'gt_w2c_all_frames','keyframe_time_indices']:
         params.pop(k)
 
     print(params.keys())
@@ -254,9 +254,14 @@ def rgbd_slam(config: dict):
     gt_w2c_all_frames_map = []
     gs_cams_all_frames_map = []
     for time_idx in range(num_frames):
-        color, depth, _, gt_pose = mapping_dataset[time_idx]
+        color, depth, _, _ = mapping_dataset[time_idx]
         # Process poses
-        gt_w2c = torch.linalg.inv(gt_pose)
+        curr_cam_rot = F.normalize(params['cam_unnorm_rots'][..., time_idx].detach())
+        curr_cam_tran = params['cam_trans'][..., time_idx].detach()
+        gt_w2c = torch.eye(4).cuda().float()
+        gt_w2c[:3, :3] = build_rotation(curr_cam_rot)
+        gt_w2c[:3, 3] = curr_cam_tran
+
         # Process RGB-D Data
         color = color.permute(2, 0, 1) / 255
         depth = depth.permute(2, 0, 1)

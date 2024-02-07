@@ -199,9 +199,11 @@ def densify(params, variables, optimizer, iter, densify_dict):
                         torch.max(torch.exp(params['log_scales']), dim=1).values <= 0.01 * variables['scene_radius']))
             new_params = {k: v[to_clone] for k, v in params.items() if k not in ['cam_unnorm_rots', 'cam_trans']}
 
-            new_timestep_vars = torch.zeros(new_params['means3D'].shape[0], device="cuda")
-            new_timestep_vars = variables['timestep'][to_clone]            
-            variables['timestep'] = torch.cat((variables['timestep'], new_timestep_vars), dim=0)
+            if 'timestep' in variables.keys():
+                new_timestep_vars = torch.zeros(new_params['means3D'].shape[0], device="cuda")
+                new_timestep_vars = variables['timestep'][to_clone]            
+                variables['timestep'] = torch.cat((variables['timestep'], new_timestep_vars), dim=0)
+
             params = cat_params_to_optimizer(new_params, params, optimizer)
             num_pts = params['means3D'].shape[0]
 
@@ -212,10 +214,12 @@ def densify(params, variables, optimizer, iter, densify_dict):
                                              'scene_radius'])
             n = densify_dict['num_to_split_into']  # number to split into
             new_params = {k: v[to_split].repeat(n, 1) for k, v in params.items() if k not in ['cam_unnorm_rots', 'cam_trans']}
+
             #track new variables for new formed points
-            new_timestep_vars = torch.zeros(new_params['means3D'].shape[0], device="cuda")
-            new_timestep_vars = variables['timestep'][to_split].repeat(n)
-            variables['timestep'] = torch.cat((variables['timestep'], new_timestep_vars), dim=0)
+            if 'timestep' in variables.keys():
+                new_timestep_vars = torch.zeros(new_params['means3D'].shape[0], device="cuda")
+                new_timestep_vars = variables['timestep'][to_split].repeat(n)
+                variables['timestep'] = torch.cat((variables['timestep'], new_timestep_vars), dim=0)
 
             stds = torch.exp(params['log_scales'])[to_split].repeat(n, 3)
             means = torch.zeros((stds.size(0), 3), device="cuda")
