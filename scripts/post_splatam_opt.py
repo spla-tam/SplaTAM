@@ -13,9 +13,9 @@ print("System Paths:")
 for p in sys.path:
     print(p)
 
-import cv2
 import numpy as np
 import torch
+import torch.nn.functional as F
 from tqdm import tqdm
 import wandb
 
@@ -32,19 +32,16 @@ from datasets.gradslam_datasets import (
     ScannetPPDataset,
     NeRFCaptureDataset
 )
-from utils.common_utils import seed_everything, save_seq_params, save_params, save_params_ckpt, save_seq_params_ckpt
+from utils.common_utils import seed_everything, save_params
 from utils.recon_helpers import setup_camera
 from utils.gs_helpers import (
     params2rendervar, params2depthplussilhouette,
-    transformed_params2depthplussilhouette,
-    transform_to_frame, report_progress, eval,
-    l1_loss_v1, matrix_to_quaternion
+    report_progress, eval, l1_loss_v1
 )
 from utils.gs_external import (
-    calc_ssim, build_rotation, densify,
-    get_expon_lr_func, update_learning_rate
+    calc_ssim, densify,
+    get_expon_lr_func, update_learning_rate, build_rotation
 )
-
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 
 
@@ -71,92 +68,6 @@ def get_dataset(config_dict, basedir, sequence, **kwargs):
         return NeRFCaptureDataset(basedir, sequence, **kwargs)
     else:
         raise ValueError(f"Unknown dataset name {config_dict['dataset_name']}")
-
-
-def get_pointcloud(color, depth, intrinsics, w2c, transform_pts=True, 
-                   mask=None, compute_mean_sq_dist=False, mean_sq_dist_method="projective"):
-    width, height = color.shape[2], color.shape[1]
-    CX = intrinsics[0][2]
-    CY = intrinsics[1][2]
-    FX = intrinsics[0][0]
-    FY = intrinsics[1][1]
-
-    # Compute indices of pixels
-    x_grid, y_grid = torch.meshgrid(torch.arange(width).cuda().float(), 
-                                    torch.arange(height).cuda().float(),
-                                    indexing='xy')
-    xx = (x_grid - CX)/FX
-    yy = (y_grid - CY)/FY
-    xx = xx.reshape(-1)
-    yy = yy.reshape(-1)
-    depth_z = depth[0].reshape(-1)
-
-    # Initialize point cloud
-    pts_cam = torch.stack((xx * depth_z, yy * depth_z, depth_z), dim=-1)
-    if transform_pts:
-        pix_ones = torch.ones(height * width, 1).cuda().float()
-        pts4 = torch.cat((pts_cam, pix_ones), dim=1)
-        c2w = torch.inverse(w2c)
-        pts = (c2w @ pts4.T).T[:, :3]
-    else:
-        pts = pts_cam
-
-    # Compute mean squared distance for initializing the scale of the Gaussians
-    if compute_mean_sq_dist:
-        if mean_sq_dist_method == "projective":
-            # Projective Geometry (this is fast, farther -> larger radius)
-            scale_gaussian = depth_z / ((FX + FY)/2)
-            mean3_sq_dist = scale_gaussian**2
-        else:
-            raise ValueError(f"Unknown mean_sq_dist_method: {mean_sq_dist_method}")
-    
-    # Colorize point cloud
-    cols = torch.permute(color, (1, 2, 0)).reshape(-1, 3) # (C, H, W) -> (H, W, C) -> (H * W, C)
-    point_cld = torch.cat((pts, cols), -1)
-
-    # Select points based on mask
-    if mask is not None:
-        point_cld = point_cld[mask]
-        if compute_mean_sq_dist:
-            mean3_sq_dist = mean3_sq_dist[mask]
-
-    if compute_mean_sq_dist:
-        return point_cld, mean3_sq_dist
-    else:
-        return point_cld
-
-
-def initialize_params(init_pt_cld, num_frames, mean3_sq_dist):
-    num_pts = init_pt_cld.shape[0]
-    means3D = init_pt_cld[:, :3] # [num_gaussians, 3]
-    unnorm_rots = np.tile([1, 0, 0, 0], (num_pts, 1)) # [num_gaussians, 3]
-    logit_opacities = torch.zeros((num_pts, 1), dtype=torch.float, device="cuda")
-    params = {
-        'means3D': means3D,
-        'rgb_colors': init_pt_cld[:, 3:6],
-        'unnorm_rotations': unnorm_rots,
-        'logit_opacities': logit_opacities,
-        'log_scales': torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 1)),
-    }
-
-    # Initialize a single gaussian trajectory to model the camera poses relative to the first frame
-    cam_rots = np.tile([1, 0, 0, 0], (1, 1))
-    cam_rots = np.tile(cam_rots[:, :, None], (1, 1, num_frames))
-    params['cam_unnorm_rots'] = cam_rots
-    params['cam_trans'] = np.zeros((1, 3, num_frames))
-
-    for k, v in params.items():
-        # Check if value is already a torch tensor
-        if not isinstance(v, torch.Tensor):
-            params[k] = torch.nn.Parameter(torch.tensor(v).cuda().float().contiguous().requires_grad_(True))
-        else:
-            params[k] = torch.nn.Parameter(v.cuda().float().contiguous().requires_grad_(True))
-
-    variables = {'max_2D_radius': torch.zeros(params['means3D'].shape[0]).cuda().float(),
-                 'means2D_gradient_accum': torch.zeros(params['means3D'].shape[0]).cuda().float(),
-                 'denom': torch.zeros(params['means3D'].shape[0]).cuda().float()}
-
-    return params, variables
 
 
 def initialize_optimizer(params, lrs_dict):
@@ -191,8 +102,7 @@ def initialize_first_timestep_from_ckpt(ckpt_path,dataset, num_frames, lrs_dict,
     params = dict(np.load(ckpt_path, allow_pickle=True))
     variables = {}
 
-    for k in ['intrinsics', 'w2c', 'org_width', 'org_height', 'gt_w2c_all_frames']:
-    # for k in ['timestep','intrinsics', 'w2c', 'org_width', 'org_height', 'gt_w2c_all_frames']:
+    for k in ['intrinsics', 'w2c', 'org_width', 'org_height', 'gt_w2c_all_frames','keyframe_time_indices']:
         params.pop(k)
 
     print(params.keys())
@@ -200,7 +110,6 @@ def initialize_first_timestep_from_ckpt(ckpt_path,dataset, num_frames, lrs_dict,
     variables['max_2D_radius'] = torch.zeros(params['means3D'].shape[0]).cuda().float()
     variables['means2D_gradient_accum'] = torch.zeros(params['means3D'].shape[0]).cuda().float()
     variables['denom'] = torch.zeros(params['means3D'].shape[0]).cuda().float()
-    # variables['timestep'] = torch.zeros(params['means3D'].shape[0]).cuda().float()
     variables['timestep'] = torch.tensor(params['timestep']).cuda().float()
     params.pop('timestep')
     optimizer = initialize_optimizer(params, lrs_dict)
@@ -248,90 +157,6 @@ def get_loss_gs(params, curr_data, variables, loss_weights):
     weighted_losses['loss'] = loss
 
     return loss, variables, weighted_losses
-
-
-def initialize_new_params(new_pt_cld, mean3_sq_dist):
-    num_pts = new_pt_cld.shape[0]
-    means3D = new_pt_cld[:, :3] # [num_gaussians, 3]
-    unnorm_rots = np.tile([1, 0, 0, 0], (num_pts, 1)) # [num_gaussians, 3]
-    logit_opacities = torch.zeros((num_pts, 1), dtype=torch.float, device="cuda")
-    params = {
-        'means3D': means3D,
-        'rgb_colors': new_pt_cld[:, 3:6],
-        'unnorm_rotations': unnorm_rots,
-        'logit_opacities': logit_opacities,
-        'log_scales': torch.tile(torch.log(torch.sqrt(mean3_sq_dist))[..., None], (1, 1)),
-    }
-    for k, v in params.items():
-        # Check if value is already a torch tensor
-        if not isinstance(v, torch.Tensor):
-            params[k] = torch.nn.Parameter(torch.tensor(v).cuda().float().contiguous().requires_grad_(True))
-        else:
-            params[k] = torch.nn.Parameter(v.cuda().float().contiguous().requires_grad_(True))
-    return params
-
-
-def infill_depth(depth, inpaint_radius=1):
-    """
-    Function to infill Depth for invalid regions
-    Input:
-        depth: Depth Image (Numpy)
-        radius: Radius of the circular neighborhood for infilling
-    Output:
-        depth: Depth Image with invalid regions infilled (Numpy)
-    """
-    invalid_mask = (depth == 0)
-    invalid_mask = invalid_mask.astype(np.uint8)
-    filled_depth = cv2.inpaint(depth, invalid_mask, inpaint_radius, cv2.INPAINT_NS)
-
-    return filled_depth
-
-
-def add_new_gaussians(params, variables, curr_data, sil_thres, time_idx, mean_sq_dist_method):
-    # Silhouette Rendering
-    transformed_pts = transform_to_frame(params, time_idx, gaussians_grad=False, camera_grad=False)
-    depth_sil_rendervar = transformed_params2depthplussilhouette(params, curr_data['w2c'],
-                                                                 transformed_pts)
-    depth_sil, _, _, = Renderer(raster_settings=curr_data['cam'])(**depth_sil_rendervar)
-    silhouette = depth_sil[1, :, :]
-    non_presence_sil_mask = (silhouette < sil_thres)
-    # Check for new foreground objects by using GT depth
-    gt_depth = curr_data['depth'][0, :, :]
-    render_depth = depth_sil[0, :, :]
-    depth_error = torch.abs(gt_depth - render_depth) * (gt_depth > 0)
-    non_presence_depth_mask = (render_depth > gt_depth) * (depth_error > 50*depth_error.median())
-    # Determine non-presence mask
-    non_presence_mask = non_presence_sil_mask | non_presence_depth_mask
-    # Infill Depth for invalid regions of GT Depth
-    infilled_gt_depth = infill_depth(curr_data['depth'][0, :, :].detach().cpu().numpy())
-    infilled_gt_depth = torch.tensor(infilled_gt_depth).cuda().float().unsqueeze(0)
-    # Flatten mask
-    non_presence_mask = non_presence_mask.reshape(-1)
-
-    # Get the new frame Gaussians based on the Silhouette
-    if torch.sum(non_presence_mask) > 0:
-        # Get the new pointcloud in the world frame
-        curr_cam_rot = torch.nn.functional.normalize(params['cam_unnorm_rots'][..., time_idx].detach())
-        curr_cam_tran = params['cam_trans'][..., time_idx].detach()
-        curr_w2c = torch.eye(4).cuda().float()
-        curr_w2c[:3, :3] = build_rotation(curr_cam_rot)
-        curr_w2c[:3, 3] = curr_cam_tran
-        valid_depth_mask = (infilled_gt_depth > 0)
-        non_presence_mask = non_presence_mask & valid_depth_mask.reshape(-1)
-        new_pt_cld, mean3_sq_dist = get_pointcloud(curr_data['im'], infilled_gt_depth, curr_data['intrinsics'], 
-                                    curr_w2c, mask=non_presence_mask, compute_mean_sq_dist=True,
-                                    mean_sq_dist_method=mean_sq_dist_method)
-        new_params = initialize_new_params(new_pt_cld, mean3_sq_dist)
-        for k, v in new_params.items():
-            params[k] = torch.nn.Parameter(torch.cat((params[k], v), dim=0).requires_grad_(True))
-        num_pts = params['means3D'].shape[0]
-        variables['means2D_gradient_accum'] = torch.zeros(num_pts, device="cuda").float()
-        variables['denom'] = torch.zeros(num_pts, device="cuda").float()
-        variables['max_2D_radius'] = torch.zeros(num_pts, device="cuda").float()
-        new_timestep = time_idx*torch.ones(new_pt_cld.shape[0],device="cuda").float()
-        variables['timestep'] = torch.cat((variables['timestep'],new_timestep),dim=0)
-
-    return params, variables
 
 
 def convert_params_to_store(params):
@@ -429,9 +254,14 @@ def rgbd_slam(config: dict):
     gt_w2c_all_frames_map = []
     gs_cams_all_frames_map = []
     for time_idx in range(num_frames):
-        color, depth, _, gt_pose = mapping_dataset[time_idx]
+        color, depth, _, _ = mapping_dataset[time_idx]
         # Process poses
-        gt_w2c = torch.linalg.inv(gt_pose)
+        curr_cam_rot = F.normalize(params['cam_unnorm_rots'][..., time_idx].detach())
+        curr_cam_tran = params['cam_trans'][..., time_idx].detach()
+        gt_w2c = torch.eye(4).cuda().float()
+        gt_w2c[:3, :3] = build_rotation(curr_cam_rot)
+        gt_w2c[:3, 3] = curr_cam_tran
+
         # Process RGB-D Data
         color = color.permute(2, 0, 1) / 255
         depth = depth.permute(2, 0, 1)
@@ -456,12 +286,7 @@ def rgbd_slam(config: dict):
         curr_gt_w2c = gt_w2c_all_frames_map[:iter_time_idx+1]
         curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': iter_time_idx, 
                      'intrinsics': intrinsics, 'w2c': w2c, 'iter_gt_w2c_list': curr_gt_w2c}
-       
-        # Add new Gaussians to the scene based on the Silhouette
-        # if time_idx > 0:
-        #     params, variables = add_new_gaussians(params, variables, curr_data, 
-        #                                           config['train']['sil_thres'], time_idx,
-        #                                           config['mean_sq_dist_method'])
+
         post_num_pts = params['means3D'].shape[0]
         if config['use_wandb']:
             wandb_run.log({"Init/Number of Gaussians": post_num_pts,

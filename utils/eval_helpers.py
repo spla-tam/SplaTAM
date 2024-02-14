@@ -8,8 +8,11 @@ import matplotlib.pyplot as plt
 
 from datasets.gradslam_datasets.geometryutils import relative_transformation
 from utils.recon_helpers import setup_camera
-from utils.slam_external import build_rotation,calc_psnr
-from utils.slam_helpers import transform_to_frame, transformed_params2rendervar, transformed_params2depthplussilhouette
+from utils.slam_external import build_rotation, calc_psnr
+from utils.slam_helpers import (
+    transform_to_frame, transformed_params2rendervar, transformed_params2depthplussilhouette,
+    quat_mult, matrix_to_quaternion
+)
 
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 
@@ -205,14 +208,14 @@ def report_progress(params, data, i, progress_bar, iter_time_idx, sil_thres, eve
                                f"{stage}/ATE RMSE":ate_rmse}
 
         # Get current frame Gaussians
-        transformed_pts = transform_to_frame(params, iter_time_idx, 
-                                             gaussians_grad=False,
-                                             camera_grad=False)
+        transformed_gaussians = transform_to_frame(params, iter_time_idx, 
+                                                   gaussians_grad=False,
+                                                   camera_grad=False)
 
         # Initialize Render Variables
-        rendervar = transformed_params2rendervar(params, transformed_pts)
+        rendervar = transformed_params2rendervar(params, transformed_gaussians)
         depth_sil_rendervar = transformed_params2depthplussilhouette(params, data['w2c'], 
-                                                                     transformed_pts)
+                                                                     transformed_gaussians)
         depth_sil, _, _, = Renderer(raster_settings=data['cam'])(**depth_sil_rendervar)
         rastered_depth = depth_sil[0, :, :].unsqueeze(0)
         valid_depth_mask = (data['depth'] > 0)
@@ -306,14 +309,14 @@ def eval_online(dataset, all_params, num_frames, eval_online_dir, sil_thres,
         curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': time_idx, 'intrinsics': intrinsics, 'w2c': first_frame_w2c}
 
         # Get current frame Gaussians
-        transformed_pts = transform_to_frame(params, time_idx, 
-                                             gaussians_grad=False,
-                                             camera_grad=False)
+        transformed_gaussians = transform_to_frame(params, time_idx, 
+                                                   gaussians_grad=False, 
+                                                   camera_grad=False)
 
         # Initialize Render Variables
-        rendervar = transformed_params2rendervar(params, transformed_pts)
+        rendervar = transformed_params2rendervar(params, transformed_gaussians)
         depth_sil_rendervar = transformed_params2depthplussilhouette(params, first_frame_w2c,
-                                                                     transformed_pts)
+                                                                     transformed_gaussians)
         
         # Render Depth & Silhouette
         depth_sil, _, _, = Renderer(raster_settings=curr_data['cam'])(**depth_sil_rendervar)
@@ -445,17 +448,17 @@ def eval(dataset, final_params, num_frames, eval_dir, sil_thres,
             continue
 
         # Get current frame Gaussians
-        transformed_pts = transform_to_frame(final_params, time_idx, 
-                                             gaussians_grad=False,
-                                             camera_grad=False)
+        transformed_gaussians = transform_to_frame(final_params, time_idx, 
+                                                   gaussians_grad=False, 
+                                                   camera_grad=False)
  
         # Define current frame data
         curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': time_idx, 'intrinsics': intrinsics, 'w2c': first_frame_w2c}
 
         # Initialize Render Variables
-        rendervar = transformed_params2rendervar(final_params, transformed_pts)
+        rendervar = transformed_params2rendervar(final_params, transformed_gaussians)
         depth_sil_rendervar = transformed_params2depthplussilhouette(final_params, curr_data['w2c'],
-                                                                     transformed_pts)
+                                                                     transformed_gaussians)
 
         # Render Depth & Silhouette
         depth_sil, _, _, = Renderer(raster_settings=curr_data['cam'])(**depth_sil_rendervar)
@@ -664,19 +667,35 @@ def eval_nvs(dataset, final_params, num_frames, eval_dir, sil_thres,
         if test_time_idx != 0 and (test_time_idx+1) % eval_every != 0:
             continue
 
+        transformed_gaussians = {}
         # Transform Centers of Gaussians to Camera Frame
         pts = final_params['means3D'].detach()
         pts_ones = torch.ones(pts.shape[0], 1).cuda().float()
         pts4 = torch.cat((pts, pts_ones), dim=1)
         transformed_pts = (gt_w2c @ pts4.T).T[:, :3]
+        transformed_gaussians['means3D'] = transformed_pts
+        # Check if Gaussians need to be rotated (Isotropic or Anisotropic)
+        if final_params['log_scales'].shape[1] == 1:
+            transform_rots = False # Isotropic Gaussians
+        else:
+            transform_rots = True # Anisotropic Gaussians
+        # Transform Rots of Gaussians to Camera Frame
+        if transform_rots:
+            norm_rots = F.normalize(final_params['unnorm_rotations'].detach())
+            gt_cam_rot = matrix_to_quaternion(gt_w2c[:3, :3])
+            gt_cam_rot = F.normalize(gt_cam_rot.unsqueeze(0))
+            transformed_rots = quat_mult(gt_cam_rot, norm_rots)
+            transformed_gaussians['unnorm_rotations'] = transformed_rots
+        else:
+            transformed_gaussians['unnorm_rotations'] = final_params['unnorm_rotations'].detach()
  
         # Define current frame data
         curr_data = {'cam': cam, 'im': color, 'depth': depth, 'id': time_idx, 'intrinsics': intrinsics, 'w2c': first_frame_w2c}
 
         # Initialize Render Variables
-        rendervar = transformed_params2rendervar(final_params, transformed_pts)
+        rendervar = transformed_params2rendervar(final_params, transformed_gaussians)
         depth_sil_rendervar = transformed_params2depthplussilhouette(final_params, curr_data['w2c'],
-                                                                     transformed_pts)
+                                                                     transformed_gaussians)
 
         # Render Depth & Silhouette
         depth_sil, _, _, = Renderer(raster_settings=curr_data['cam'])(**depth_sil_rendervar)
