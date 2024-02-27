@@ -79,22 +79,25 @@ def get_rendervars(params, w2c, curr_timestep):
     selected_params = deepcopy(params)
     for k in keys:
         selected_params[k] = selected_params[k][selected_params_idx]
-    transformed_pts = selected_params['means3D']
+    if selected_params['log_scales'].shape[-1]  == 1:
+        log_scales = torch.tile(selected_params['log_scales'], (1, 3))
+    else:
+        log_scales = selected_params['log_scales']
     w2c = torch.tensor(w2c).cuda().float()
     rendervar = {
-        'means3D': transformed_pts,
+        'means3D': selected_params['means3D'],
         'colors_precomp': selected_params['rgb_colors'],
         'rotations': torch.nn.functional.normalize(selected_params['unnorm_rotations']),
         'opacities': torch.sigmoid(selected_params['logit_opacities']),
-        'scales': torch.exp(torch.tile(selected_params['log_scales'], (1, 3))),
+        'scales': torch.exp(log_scales),
         'means2D': torch.zeros_like(selected_params['means3D'], device="cuda")
     }
     depth_rendervar = {
-        'means3D': transformed_pts,
-        'colors_precomp': get_depth_and_silhouette(transformed_pts, w2c),
+        'means3D': selected_params['means3D'],
+        'colors_precomp': get_depth_and_silhouette(selected_params['means3D'], w2c),
         'rotations': torch.nn.functional.normalize(selected_params['unnorm_rotations']),
         'opacities': torch.sigmoid(selected_params['logit_opacities']),
-        'scales': torch.exp(torch.tile(selected_params['log_scales'], (1, 3))),
+        'scales': torch.exp(log_scales),
         'means2D': torch.zeros_like(selected_params['means3D'], device="cuda")
     }
     return rendervar, depth_rendervar

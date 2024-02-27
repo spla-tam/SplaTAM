@@ -20,6 +20,7 @@ config = dict(
     seed=0,
     primary_device=primary_device,
     mean_sq_dist_method="projective", # ["projective", "knn"] (Type of Mean Squared Distance Calculation for Scale of Gaussians)
+    gaussian_distribution="isotropic", # ["isotropic", "anisotropic"] (Isotropic -> Spherical Covariance, Anisotropic -> Ellipsoidal Covariance)
     report_iter_progress=False,
     use_wandb=False,
     wandb=dict(
