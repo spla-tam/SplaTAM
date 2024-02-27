@@ -1,4 +1,3 @@
-import pprint
 import argparse
 import os
 import random
@@ -20,7 +19,7 @@ import torch
 from tqdm import tqdm
 import wandb
 
-from datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, AzureKinectDataset,
+from datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
                                         ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
                                         ScannetPPDataset, NeRFCaptureDataset)
 from utils.common_utils import seed_everything, save_seq_params, save_params, save_params_ckpt, save_seq_params_ckpt
@@ -31,14 +30,14 @@ from utils.gs_external import (calc_ssim, build_rotation, densify, get_expon_lr_
 
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 
-pp = pprint.PrettyPrinter(indent=4)
-
 
 def get_dataset(config_dict, basedir, sequence, **kwargs):
     if config_dict["dataset_name"].lower() in ["icl"]:
         return ICLDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["replica"]:
         return ReplicaDataset(config_dict, basedir, sequence, **kwargs)
+    elif config_dict["dataset_name"].lower() in ["replicav2"]:
+        return ReplicaV2Dataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["azure", "azurekinect"]:
         return AzureKinectDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["scannet"]:
@@ -173,7 +172,7 @@ def initialize_first_timestep_from_ckpt(ckpt_path,dataset, num_frames, lrs_dict,
 
     # Initialize Parameters & Optimizer from Checkpoint
     # Load checkpoint
-    #print(f"Loading Params: {ckpt_path}")
+    print(f"Loading Params from path: {ckpt_path}")
     params = dict(np.load(ckpt_path, allow_pickle=True))
     variables = {}
 
@@ -184,7 +183,6 @@ def initialize_first_timestep_from_ckpt(ckpt_path,dataset, num_frames, lrs_dict,
     variables['max_2D_radius'] = torch.zeros(params['means3D'].shape[0]).cuda().float()
     variables['means2D_gradient_accum'] = torch.zeros(params['means3D'].shape[0]).cuda().float()
     variables['denom'] = torch.zeros(params['means3D'].shape[0]).cuda().float()
-    # variables['timestep'] = torch.zeros(params['means3D'].shape[0]).cuda().float()
     variables['timestep'] = torch.tensor(params['timestep']).cuda().float()
     params.pop('timestep')
     optimizer = initialize_optimizer(params, lrs_dict)
@@ -330,7 +328,7 @@ def convert_params_to_store(params):
 
 def rgbd_slam(config: dict):
     print("Loaded Config:")
-    pp.pprint(f"{config}")
+    print(f"{config}")
 
     # Init WandB
     if config['use_wandb']:

@@ -21,20 +21,9 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import wandb
 
-from datasets.gradslam_datasets import (
-    load_dataset_config,
-    ICLDataset,
-    ReplicaDataset,
-    ReplicaV2Dataset,
-    AzureKinectDataset,
-    ScannetDataset,
-    Ai2thorDataset,
-    Record3DDataset,
-    RealsenseDataset,
-    TUMDataset,
-    ScannetPPDataset,
-    NeRFCaptureDataset
-)
+from datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
+                                        ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
+                                        ScannetPPDataset, NeRFCaptureDataset)
 from utils.common_utils import seed_everything, save_params_ckpt, save_params
 from utils.eval_helpers import report_loss, report_progress, eval
 from utils.keyframe_selection import keyframe_selection_overlap

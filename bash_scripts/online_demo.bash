@@ -1,5 +1,6 @@
-# check rmem_max and wmem_max, and increase size if necessary
+#!/bin/bash
 
+# check rmem_max and wmem_max, and increase size if necessary
 if [ "$#" -ne 1 ]; then
     echo "Usage: bash_scripts/online_demo.bash <config_file>"
     exit
