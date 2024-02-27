@@ -19,29 +19,15 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import wandb
 
-from datasets.gradslam_datasets import (
-    load_dataset_config,
-    ICLDataset,
-    ReplicaDataset,
-    AzureKinectDataset,
-    ScannetDataset,
-    Ai2thorDataset,
-    Record3DDataset,
-    RealsenseDataset,
-    TUMDataset,
-    ScannetPPDataset,
-    NeRFCaptureDataset
-)
+from datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
+                                        ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
+                                        ScannetPPDataset, NeRFCaptureDataset)
 from utils.common_utils import seed_everything, save_params
 from utils.recon_helpers import setup_camera
-from utils.gs_helpers import (
-    params2rendervar, params2depthplussilhouette,
-    report_progress, eval, l1_loss_v1
-)
-from utils.gs_external import (
-    calc_ssim, densify,
-    get_expon_lr_func, update_learning_rate, build_rotation
-)
+from utils.gs_helpers import (params2rendervar, params2depthplussilhouette,
+                              report_progress, eval, l1_loss_v1)
+from utils.gs_external import calc_ssim, densify, get_expon_lr_func, update_learning_rate, build_rotation
+
 from diff_gaussian_rasterization import GaussianRasterizer as Renderer
 
 
@@ -50,6 +36,8 @@ def get_dataset(config_dict, basedir, sequence, **kwargs):
         return ICLDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["replica"]:
         return ReplicaDataset(config_dict, basedir, sequence, **kwargs)
+    elif config_dict["dataset_name"].lower() in ["replicav2"]:
+        return ReplicaV2Dataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["azure", "azurekinect"]:
         return AzureKinectDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["scannet"]:
@@ -93,19 +81,19 @@ def initialize_first_timestep_from_ckpt(ckpt_path,dataset, num_frames, lrs_dict,
     cam = setup_camera(color.shape[2], color.shape[1], intrinsics.cpu().numpy(), w2c.detach().cpu().numpy())
 
     # Get Initial Point Cloud (PyTorch CUDA Tensor)
-    mask = (depth > 0) # Mask out invalid depth values
+    mask = (depth > 0)  # Mask out invalid depth values
     mask = mask.reshape(-1)
 
     # Initialize Parameters & Optimizer from Checkpoint
     # Load checkpoint
-    print(f"Loading Params")
+    print(f"Loading Params from path: {ckpt_path}")
     params = dict(np.load(ckpt_path, allow_pickle=True))
     variables = {}
 
-    for k in ['intrinsics', 'w2c', 'org_width', 'org_height', 'gt_w2c_all_frames','keyframe_time_indices']:
+
+    for k in ['intrinsics', 'w2c', 'org_width', 'org_height', 'gt_w2c_all_frames', 'keyframe_time_indices']:
         params.pop(k)
 
-    print(params.keys())
     params = {k: torch.tensor(params[k]).cuda().float().requires_grad_(True) for k in params.keys()}
     variables['max_2D_radius'] = torch.zeros(params['means3D'].shape[0]).cuda().float()
     variables['means2D_gradient_accum'] = torch.zeros(params['means3D'].shape[0]).cuda().float()
@@ -170,7 +158,6 @@ def convert_params_to_store(params):
 
 
 def rgbd_slam(config: dict):
-    # Print Config
     print("Loaded Config:")
     print(f"{config}")
 

@@ -20,19 +20,9 @@ import torch
 from tqdm import tqdm
 import wandb
 
-from datasets.gradslam_datasets import (
-    load_dataset_config,
-    ICLDataset,
-    ReplicaDataset,
-    ReplicaV2Dataset,
-    AzureKinectDataset,
-    ScannetDataset,
-    Ai2thorDataset,
-    Record3DDataset,
-    RealsenseDataset,
-    TUMDataset,
-    ScannetPPDataset,
-)
+from datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
+                                        ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
+                                        ScannetPPDataset, NeRFCaptureDataset)
 from utils.common_utils import seed_everything
 from utils.eval_helpers import eval, eval_nvs
 
@@ -58,6 +48,8 @@ def get_dataset(config_dict, basedir, sequence, **kwargs):
         return TUMDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["scannetpp"]:
         return ScannetPPDataset(basedir, sequence, **kwargs)
+    elif config_dict["dataset_name"].lower() in ["nerfcapture"]:
+        return NeRFCaptureDataset(basedir, sequence, **kwargs)
     else:
         raise ValueError(f"Unknown dataset name {config_dict['dataset_name']}")
 

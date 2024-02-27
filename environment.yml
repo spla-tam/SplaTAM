@@ -1,9 +1,11 @@
 name: splatam
 channels:
+  - nvidia/label/cuda-11.6.0
   - pytorch
   - conda-forge
   - defaults
 dependencies:
+  - cuda-toolkit
   - cudatoolkit=11.6
   - python=3.10
   - pytorch=1.12.1
@@ -25,4 +27,4 @@ dependencies:
     - open3d==0.16.0
     - torchmetrics
     - cyclonedds
-    - git+https://github.com/JonathonLuiten/diff-gaussian-rasterization-w-depth/tree/cb65e4b86bc3bd8ed42174b72a62e8d3a3a71110
+    - git+https://github.com/JonathonLuiten/diff-gaussian-rasterization-w-depth.git@cb65e4b86bc3bd8ed42174b72a62e8d3a3a71110

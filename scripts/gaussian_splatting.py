@@ -19,20 +19,10 @@ import torch
 from tqdm import tqdm
 import wandb
 
-from datasets.gradslam_datasets import (
-    load_dataset_config,
-    ICLDataset,
-    ReplicaDataset,
-    AzureKinectDataset,
-    ScannetDataset,
-    Ai2thorDataset,
-    Record3DDataset,
-    RealsenseDataset,
-    TUMDataset,
-    ScannetPPDataset,
-    NeRFCaptureDataset
-)
-from utils.common_utils import seed_everything,save_params
+from datasets.gradslam_datasets import (load_dataset_config, ICLDataset, ReplicaDataset, ReplicaV2Dataset, AzureKinectDataset,
+                                        ScannetDataset, Ai2thorDataset, Record3DDataset, RealsenseDataset, TUMDataset,
+                                        ScannetPPDataset, NeRFCaptureDataset)
+from utils.common_utils import seed_everything, save_params
 from utils.recon_helpers import setup_camera
 from utils.gs_helpers import (
     params2rendervar, params2depthplussilhouette,
@@ -53,6 +43,8 @@ def get_dataset(config_dict, basedir, sequence, **kwargs):
         return ICLDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["replica"]:
         return ReplicaDataset(config_dict, basedir, sequence, **kwargs)
+    elif config_dict["dataset_name"].lower() in ["replicav2"]:
+        return ReplicaV2Dataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["azure", "azurekinect"]:
         return AzureKinectDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["scannet"]:
