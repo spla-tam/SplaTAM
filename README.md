@@ -176,6 +176,14 @@ To visualize the SplaTAM reconstruction in an online fashion, please use the fol
 python viz_scripts/online_recon.py configs/iphone/splatam.py
 ```
 
+To export the splats to a .ply file, please use the following command:
+
+```bash
+python scripts/export_ply.py configs/iphone/splatam.py
+```
+
+`PLY` format Splats can be visualized in viewers such as [SuperSplat](https://playcanvas.com/supersplat/editor) & [PolyCam](https://poly.cam/tools/gaussian-splatting).
+
 To run 3D Gaussian Splatting on the SplaTAM reconstruction, please use the following command:
 
 ```bash
