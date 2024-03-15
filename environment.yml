@@ -21,6 +21,7 @@ dependencies:
   - natsort
   - pyyaml
   - wandb
+  - gxx_linux-64=10
   - pip
   - pip:
     - lpips
