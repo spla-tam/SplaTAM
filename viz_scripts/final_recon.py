@@ -45,7 +45,7 @@ def load_scene_data(scene_path, first_frame_w2c, intrinsics):
     first_frame_w2c = torch.tensor(first_frame_w2c).cuda().float()
 
     keys = [k for k in all_params.keys() if
-            k not in ['org_width', 'org_height', 'w2c', 'intrinsics', 
+            k not in ['org_width', 'org_height', 'w2c', 'intrinsics',
                       'gt_w2c_all_frames', 'cam_unnorm_rots',
                       'cam_trans', 'keyframe_time_indices']]
 
@@ -150,7 +150,7 @@ def rgbd2pcd(color, depth, w2c, intrinsics, cfg):
 
     # Convert to Open3D format
     pts = o3d.utility.Vector3dVector(pts.contiguous().double().cpu().numpy())
-    
+
     # Colorize point cloud
     if cfg['render_mode'] == 'depth':
         cols = z_depth
@@ -177,7 +177,7 @@ def visualize(scene_path, cfg):
 
     # vis.create_window()
     vis = o3d.visualization.Visualizer()
-    vis.create_window(width=int(cfg['viz_w'] * cfg['view_scale']), 
+    vis.create_window(width=int(cfg['viz_w'] * cfg['view_scale']),
                       height=int(cfg['viz_h'] * cfg['view_scale']),
                       visible=True)
 
@@ -203,7 +203,7 @@ def visualize(scene_path, cfg):
             frustum.paint_uniform_color(np.array(cam_colormap(i_t * norm_factor / num_t)[:3]))
             vis.add_geometry(frustum)
             cam_centers.append(np.linalg.inv(all_w2cs[i_t])[:3, 3])
-        
+
         # Initialize Camera Trajectory
         num_lines = [1]
         total_num_lines = num_t - 1
@@ -258,7 +258,7 @@ def visualize(scene_path, cfg):
             if cfg['show_sil']:
                 im = (1-sil).repeat(3, 1, 1)
             pts, cols = rgbd2pcd(im, depth, w2c, k, cfg)
-        
+
         # Update Gaussians
         pcd.points = pts
         pcd.colors = cols
@@ -292,7 +292,8 @@ if __name__ == "__main__":
         results_dir = os.path.join(
             experiment.config["workdir"], experiment.config["run_name"]
         )
-        scene_path = os.path.join(results_dir, "params.npz")
+        # scene_path = os.path.join(results_dir, "params.npz")
+        scene_path = "/home/atticuszz/DevSpace/python/AutoDrive_backend/thirdparty/SplaTAM/experiments/Replica/room0_0/params.npz"
     else:
         scene_path = experiment.config["scene_path"]
     viz_cfg = experiment.config["viz"]
