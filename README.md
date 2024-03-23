@@ -93,7 +93,7 @@ We also provide a docker image. We recommend using a venv to run the code inside
 
 ```bash
 docker pull nkeetha/splatam:v1
-bash bash_scripts/docker_start.bash
+bash bash_scripts/start_docker.bash
 cd /SplaTAM/
 pip install virtualenv --user
 mkdir venv
