@@ -3,6 +3,7 @@
 <p align="center">
 
   <h1 align="center">SplaTAM: Splat, Track & Map 3D Gaussians for Dense RGB-D SLAM</h1>
+  <h3 align="center">CVPR 2024</h3>
   <p align="center">
     <a href="https://nik-v9.github.io/"><strong>Nikhil Keetha</strong></a>
     ·
@@ -30,7 +31,7 @@
 
 <br>
 
-## Coming Soon: Stay Tuned for Faster, Better and Stronger SplaTAM V2 Update!  
+## Stay Tuned for a Faster and Better Variant of SplaTAM! 
 
 <!-- TABLE OF CONTENTS -->
 <details open="open" style='padding: 10px; border-radius:5px 30px 30px 5px; border-style: solid; border-width: 1px;'>
@@ -76,11 +77,11 @@ conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit
 pip install -r requirements.txt
 ```
 
-Alternatively, we also provide a conda environment.yml file :
+<!-- Alternatively, we also provide a conda environment.yml file :
 ```bash
 conda env create -f environment.yml
 conda activate splatam
-```
+``` -->
 
 #### Windows
 
@@ -365,12 +366,12 @@ We thank the authors of the following repositories for their open-source code:
 If you find our paper and code useful, please cite us:
 
 ```bib
-@article{keetha2023splatam,
-    author    = {Keetha, Nikhil and Karhade, Jay and Jatavallabhula, Krishna Murthy and Yang, Gengshan and Scherer, Sebastian and Ramanan, Deva and Luiten, Jonathan}
-    title     = {SplaTAM: Splat, Track & Map 3D Gaussians for Dense RGB-D SLAM},
-    journal   = {arXiv},
-    year      = {2023},
-}
+@inproceedings{keetha2024splatam,
+        title={SplaTAM: Splat, Track & Map 3D Gaussians for Dense RGB-D SLAM},
+        author={Keetha, Nikhil and Karhade, Jay and Jatavallabhula, Krishna Murthy and Yang, Gengshan and Scherer, Sebastian and Ramanan, Deva and Luiten, Jonathon},
+        booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+        year={2024}
+      }
 ```
 
 ## Developers
