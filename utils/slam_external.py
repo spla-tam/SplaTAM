@@ -177,8 +177,11 @@ def prune_gaussians(params, variables, optimizer, iter, prune_dict):
             if iter >= prune_dict['remove_big_after']:
                 big_points_ws = torch.exp(params['log_scales']).max(dim=1).values > 0.1 * variables['scene_radius']
                 to_remove = torch.logical_or(to_remove, big_points_ws)
-            params, variables = remove_points(to_remove, params, variables, optimizer)
-            torch.cuda.empty_cache()
+                
+            # if there actually is any point to be remove
+            if torch.nonzero(to_remove).shape[0] > 0:
+                params, variables = remove_points(to_remove, params, variables, optimizer)
+                torch.cuda.empty_cache()
         
         # Reset Opacities for all Gaussians
         if iter > 0 and iter % prune_dict['reset_opacities_every'] == 0 and prune_dict['reset_opacities']:
